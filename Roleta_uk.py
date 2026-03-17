@@ -161,4 +161,10 @@ async def receber_resultado(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         numero = int(partes[0])
+try:
+    # seu código original que pode dar erro
+    resultado = alguma_coisa()
+    
 except Exception as e:
+    print(f"Erro capturado: {e}")  # ← estas linhas INDENTADAS (4 espaços)
+    # ou pass  # se não quiser fazer nada
