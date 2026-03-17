@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass, field
+import asyncio
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -8,163 +8,113 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from dataclasses import dataclass, field
+import logging
 
-# Token vem da variável de ambiente TOKEN (Render)
-TOKEN = os.getenv("TOKEN")
+# Configuração de log
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+TOKEN = os.getenv("TOKEN")  # Pega do Render Environment
 
 TIPOS_MERCADO = ["cor", "paridade", "faixa"]
-
 
 @dataclass
 class EstadoMercado:
     ultimo: str | None = None
     contagem: int = 0
-    sequencia: list = field(default_factory=list)
+    mercados: dict = field(default_factory=dict)
 
+@dataclass
+class Placar:
+    total_green: int = 0
+    total_win: int = 0
+    total_loss: int = 0
 
-class EstrategiaRepeticao:
-    def __init__(self, nome_mesa: str, link_mesa: str):
-        self.nome_mesa = nome_mesa
-        self.link_mesa = link_mesa
-        self.mercados = {
-            "cor": EstadoMercado(),
-            "paridade": EstadoMercado(),
-            "faixa": EstadoMercado(),
-        }
+class BotRoleta:
+    def __init__(self):
+        self.estado = {tipo: EstadoMercado() for tipo in TIPOS_MERCADO}
+        self.placar = Placar()
+    
+    def obter_placar(self) -> str:
+        return (
+            f"📊 *Placar atual:*\n"
+            f"🟢 GREEN: `{self.placar.total_green}`\n"
+            f"✅ WIN: `{self.placar.total_win}`\n"
+            f"❌ LOSS: `{self.placar.total_loss}`"
+        )
+    
+    def resetar_placar(self):
+        self.placar.total_green = 0
+        self.placar.total_win = 0
+        self.placar.total_loss = 0
 
-    def classificar_resultado(self, numero: int, cor: str):
-        if numero == 0:
-            cor_tipo = "zero"
-            paridade = "zero"
-            faixa = "zero"
-        else:
-            cor_tipo = cor.lower()
-            paridade = "par" if numero % 2 == 0 else "impar"
-            faixa = "baixo" if 1 <= numero <= 18 else "alto"
-
-        return {
-            "cor": cor_tipo,
-            "paridade": paridade,
-            "faixa": faixa,
-        }
-
-    def _atualizar_mercado(self, tipo: str, valor: str):
-        estado = self.mercados[tipo]
-
-        if valor == "zero":
-            estado.ultimo = None
-            estado.contagem = 0
-            estado.sequencia.clear()
-            return None
-
-        if estado.ultimo == valor:
-            estado.contagem += 1
-            estado.sequencia.append(valor)
-        else:
-            estado.ultimo = valor
-            estado.contagem = 1
-            estado.sequencia = [valor]
-            return None
-
-        if estado.contagem == 9:
-            return ("analise", tipo, valor, list(estado.sequencia))
-
-        if estado.contagem == 10:
-            return ("entrada", tipo, valor, list(estado.sequencia))
-
-        return None
-
-    def _oposto(self, tipo: str, valor: str) -> str:
-        if tipo == "cor":
-            return "preto" if valor == "vermelho" else "vermelho"
-        if tipo == "paridade":
-            return "par" if valor == "impar" else "impar"
-        if tipo == "faixa":
-            return "alto" if valor == "baixo" else "baixo"
-        return valor
-
-    def processar_resultado(self, numero: int, cor: str):
-        mensagens = []
-        classes = self.classificar_resultado(numero, cor)
-
-        for tipo in TIPOS_MERCADO:
-            valor = classes[tipo]
-            evento = self._atualizar_mercado(tipo, valor)
-
-            if not evento:
-                continue
-
-            acao, tipo_evt, valor_evt, seq = evento
-            seq_str = " | ".join(seq)
-
-            tipo_legenda = {
-                "cor": "Cores",
-                "paridade": "Par/Ímpar",
-                "faixa": "Altos/Baixos",
-            }[tipo_evt]
-
-            if acao == "analise":
-                msg = f"""🧠 ANÁLISE NA 9ª ENTRADA
-
-🎲 Estratégia: Repetição de {tipo_legenda}
-🎰 Mesa: {self.nome_mesa} – {self.link_mesa}
-🔁 Sequência até agora: {seq_str}
-
-⏱ Aguardando 10ª jogada para possível entrada...
-"""
-                mensagens.append(msg)
-
-            elif acao == "entrada":
-                aposta_contra = self._oposto(tipo_evt, valor_evt)
-
-                msg = f"""🪙 E-GAMES – ROLETA UK
-💰 ENTRADA CONFIRMADA 💰
-
-🎲 Estratégia: Repetição de {tipo_legenda} (análise na 9ª, entrada na 10ª)
-🎰 Mesa: {self.nome_mesa} – {self.link_mesa}
-🔁 Sequência observada: {seq_str}
-
-💵 Entrar na 10ª jogada em {aposta_contra.upper()}
-👉 Cobrir o zero
-🔄 Fazer até 3 gales (máx. 3 tentativas)
-"""
-                mensagens.append(msg)
-
-        return mensagens
-
-
-# instância da estratégia (32Red - Dynasty Roulette)
-estrategia = EstrategiaRepeticao(
-    nome_mesa="32Red - Dynasty Roulette",
-    link_mesa="https://www.32red.com/play/dynasty-roulette#playforreal",
-)
-
-# >>> PLACAR DO DIA <<<
-greens = 0
-reds = 0
-greens_seguidos = 0
-
+bot = BotRoleta()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Envie os resultados no formato: numero cor\nExemplo: 13 vermelho"
+        "🎰 *Bot Roleta 32Red*\n\n"
+        "Envie números da roleta (ex: 17, 0, 32) e receba sinais!\n\n"
+        "Comandos:\n"
+        "/placar - ver estatísticas\n"
+        "/reset - zerar placar",
+        parse_mode='Markdown'
     )
 
+async def placar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(bot.obter_placar(), parse_mode='Markdown')
+
+async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    bot.resetar_placar()
+    await update.message.reply_text("✅ Placar zerado!")
 
 async def receber_resultado(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto = update.message.text.strip().lower()
-    partes = texto.split()
-
-    if len(partes) != 2:
-        await update.message.reply_text("Formato inválido. Use: 13 vermelho")
-        return
-
     try:
-        numero = int(partes[0])
-try:
-    # seu código original que pode dar erro
-    resultado = alguma_coisa()
+        numeros = [int(n.strip()) for n in update.message.text.split(',')]
+        ultimo = numeros[-1]
+        
+        resultado = f"🎲 Último: *{ultimo}*\n"
+        sinal_gerado = False
+        
+        for tipo in TIPOS_MERCADO:
+            estado = bot.estado[tipo]
+            
+            if estado.ultimo == ultimo:
+                estado.contagem += 1
+            else:
+                if estado.contagem >= 9:
+                    resultado += f"🚨 *SINAL {tipo.upper()}: {estado.ultimo} x{estado.contagem}*\n"
+                    sinal_gerado = True
+                
+                estado.ultimo = ultimo
+                estado.contagem = 1
+        
+        if sinal_gerado:
+            bot.placar.total_green += 1
+            resultado += f"🟢 GREEN detectado!"
+        else:
+            resultado += "⏳ Monitorando..."
+        
+        await update.message.reply_text(resultado, parse_mode='Markdown')
+        
+    except ValueError:
+        await update.message.reply_text("❌ Envie números válidos! Ex: 17, 0, 32")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erro: {str(e)}")
+
+def main():
+    if not TOKEN:
+        print("❌ Erro: TOKEN não encontrado! Configure no Render Environment.")
+        return
     
-except Exception as e:
-    print(f"Erro capturado: {e}")  # ← estas linhas INDENTADAS (4 espaços)
-    # ou pass  # se não quiser fazer nada
+    app = ApplicationBuilder().token(TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("placar", placar))
+    app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receber_resultado))
+    
+    print("🤖 Bot Roleta rodando 24/7...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
