@@ -1,3 +1,9 @@
+
+import os
+# ...
+TOKEN = os.getenv("TOKEN")
+
+
 from dataclasses import dataclass, field
 from telegram import Update
 from telegram.ext import (
