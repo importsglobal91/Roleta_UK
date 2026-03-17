@@ -161,7 +161,7 @@ class EstrategiaRepeticao:
             f"Placar atual:\n"
             f"GREEN: {self.total_green}\n"
             f"WIN: {self.total_win}\n"
-            f"LOSS: {self.total_loss}"
+            f"LOSS: {self.total_loss}n"
         )
 
     def resetar_placar(self):
