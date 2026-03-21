@@ -12,11 +12,14 @@ import random
 
 TOKEN = "8792963382:AAF2rxy7oZw0f6cYT2Lg2xP0aznAUTL7JE4"
 
+# Números vermelhos da roleta europeia
+NUMEROS_VERMELHOS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
+
 @dataclass
 class EstadoRoleta:
     nome: str
-    ultimo: str = None
-    contagem: int = 0
+    ultima_cor: str = None  # "Vermelho" ou "Preto"
+    contagem_cor: int = 0
     greens: int = 0
     hora_inicio: str = None
     rodadas: int = 0
@@ -51,7 +54,7 @@ class BotMultiRoleta:
     
     async def iniciar_monitoramento(self) -> bool:
         try:
-            print("[LOG] Iniciando monitoramento multi-roleta...")
+            print("[LOG] Iniciando monitoramento de CORES...")
             hora = datetime.now().strftime("%H:%M:%S")
             
             for nome in self.roletas:
@@ -64,12 +67,22 @@ class BotMultiRoleta:
             print(f"[✗] Erro: {e}")
             return False
     
+    def obter_cor(self, numero: int) -> str:
+        """Retorna a cor do número (Vermelho ou Preto)"""
+        if numero == 0:
+            return "Verde"
+        if numero in NUMEROS_VERMELHOS:
+            return "Vermelho"
+        else:
+            return "Preto"
+    
     async def gerar_numero(self):
+        """Simula números da roleta (0-36)"""
         numero = random.randint(0, 36)
         return numero
     
     async def loop_analise_roleta(self, nome_roleta: str):
-        print(f"[▶️] Monitorando: {nome_roleta}")
+        print(f"[▶️] Monitorando CORES em: {nome_roleta}")
         
         while self.ativo:
             try:
@@ -85,48 +98,43 @@ class BotMultiRoleta:
                 await asyncio.sleep(10)
     
     async def processar_numero(self, nome_roleta: str, numero: int):
+        """Processa o número e verifica a sequência de cores"""
         roleta = self.roletas[nome_roleta]
-        numero_str = str(numero)
+        cor = self.obter_cor(numero)
         
-        if roleta.ultimo != numero_str:
-            roleta.contagem = 1
-            roleta.ultimo = numero_str
+        # Se a cor mudou, reseta contador
+        if roleta.ultima_cor != cor:
+            roleta.contagem_cor = 1
+            roleta.ultima_cor = cor
         else:
-            roleta.contagem += 1
+            # Mesma cor = incrementa
+            roleta.contagem_cor += 1
         
         roleta.rodadas += 1
         
-        print(f"[{nome_roleta}] Nº: {numero} | Seq: {roleta.contagem}x | Rodadas: {roleta.rodadas}")
+        print(f"[{nome_roleta}] Nº: {numero} | Cor: {cor} | Seq: {roleta.contagem_cor}x | Rodadas: {roleta.rodadas}")
         
-        # Aviso na 9ª sequência
-        if roleta.contagem == 9:
+        # AVISO NA 9ª SEQUÊNCIA
+        if roleta.contagem_cor == 9:
             try:
                 await self.context.bot.send_message(
                     chat_id=self.chat_id,
-                    text=f"⚠️ **ATENÇÃO!** *[{nome_roleta}]* Próxima é a 10ª! Nº: `{numero}` | Seq: `9x`",
+                    text=f"⚠️ **ATENÇÃO!** *[{nome_roleta}]*\n\n🎨 Cor: **{cor}**\n📊 Sequência: **9x**\n\n⏳ Próxima pode ser GREEN!",
                     parse_mode="Markdown"
                 )
             except:
                 pass
         
-        # Envia atualização a cada 2 números (exceto na 9ª)
-        if self.context and self.chat_id and roleta.contagem % 2 == 0 and roleta.contagem != 9:
-            try:
-                await self.context.bot.send_message(
-                    chat_id=self.chat_id,
-                    text=f"📊 *[{nome_roleta}]* Nº: `{numero}` | Seq: `{roleta.contagem}x`",
-                    parse_mode="Markdown"
-                )
-            except:
-                pass
-        
-        if roleta.contagem == 10:
+        # SINAL GREEN NA 10ª SEQUÊNCIA
+        if roleta.contagem_cor == 10:
             roleta.greens += 1
             sinal = (
                 f"🟢 **SINAL GREEN!** 🟢\n\n"
                 f"📍 Roleta: **{nome_roleta}**\n"
+                f"🎨 Cor: **{cor}**\n"
                 f"📊 Número: {numero}\n"
-                f"🔄 Sequência: {roleta.contagem}x IGUAIS\n"
+                f"🔄 Sequência: **10x {cor} IGUAIS**\n"
+                f"💰 **PODE ENTRAR AGORA!**\n"
                 f"🟢 GREENs nesta roleta: {roleta.greens}\n"
                 f"🎯 Rodadas analisadas: {roleta.rodadas}"
             )
@@ -137,9 +145,10 @@ class BotMultiRoleta:
             if self.context and self.chat_id:
                 await self.enviar_sinal(sinal)
             
-            roleta.contagem = 0
+            roleta.contagem_cor = 0
     
     async def enviar_sinal(self, mensagem: str):
+        """Envia sinal para Telegram"""
         try:
             await self.context.bot.send_message(
                 chat_id=self.chat_id,
@@ -151,6 +160,7 @@ class BotMultiRoleta:
             print(f"[✗] Erro ao enviar: {e}")
     
     def parar(self):
+        """Para o bot"""
         self.ativo = False
         print("[⏹️] Bot parado")
 
@@ -161,11 +171,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     botauto.context = context
     
     msg = (
-        "🎰 **Bot Multi-Roleta 32Red v5.0**\n\n"
-        "**Monitorando 15 roletas em paralelo!**\n\n"
+        "🎰 **Bot Estratégia de CORES v6.0**\n\n"
+        "**Monitorando 15 roletas - CORES!**\n\n"
+        "📊 Estratégia:\n"
+        "• 9x mesma cor = ⚠️ AVISO\n"
+        "• 10x mesma cor = 🟢 SINAL GREEN\n\n"
         "/iniciar - Ligar monitoramento 24/7\n"
         "/status - Ver status de todas\n"
-        "/roletas - Lista de roletas monitoradas\n"
+        "/roletas - Lista de roletas\n"
         "/parar - Desligar bot\n\n"
         "✅ Pronto para monitorar!"
     )
@@ -177,7 +190,7 @@ async def iniciar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Bot já está ativo!")
         return
     
-    await update.message.reply_text("⏳ Iniciando monitoramento de 15 roletas...\n(Aguarde 30 segundos)")
+    await update.message.reply_text("⏳ Iniciando monitoramento de CORES em 15 roletas...\n(Aguarde 30 segundos)")
     
     try:
         sucesso = await botauto.iniciar_monitoramento()
@@ -189,9 +202,9 @@ async def iniciar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = (
                 "✅ **BOT LIGADO!**\n\n"
                 f"🎰 Monitorando {len(botauto.roletas)} roletas\n"
-                f"⏱️ Início: {botauto.roletas[list(botauto.roletas.keys())[0]].hora_inicio}\n"
-                "📊 Analisando sequências...\n\n"
-                "Use /roletas para ver quais"
+                f"🎨 Estratégia: Sequências de CORES\n"
+                f"⏱️ Início: {botauto.roletas[list(botauto.roletas.keys())[0]].hora_inicio}\n\n"
+                "Use /status para ver atualizações"
             )
             await update.message.reply_text(msg, parse_mode="Markdown")
             print("[✓] Bot inicializado!")
@@ -206,13 +219,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Bot desligado. Use /iniciar")
         return
     
-    msg = "✅ **STATUS - TODAS AS ROLETAS**\n\n"
+    msg = "✅ **STATUS - MONITORAMENTO DE CORES**\n\n"
     
     for nome, roleta in botauto.roletas.items():
         msg += (
             f"🎰 **{nome}**\n"
-            f"   Último: {roleta.ultimo or '...'} | "
-            f"Seq: {roleta.contagem}x | "
+            f"   Cor: {roleta.ultima_cor or '...'} | "
+            f"Seq: {roleta.contagem_cor}x | "
             f"🟢 {roleta.greens}\n"
         )
     
@@ -233,6 +246,7 @@ async def parar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     msg = (
         "⏹️ **Bot Parado**\n\n"
+        f"🎨 **Estratégia de CORES**\n\n"
         f"🟢 **Total GREENs: {total_greens}**\n\n"
     )
     
@@ -244,10 +258,11 @@ async def parar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     print("\n" + "="*60)
-    print("🎰 BOT MULTI-ROLETA 32RED v5.0")
+    print("🎰 BOT ESTRATÉGIA DE CORES v6.0")
     print("="*60)
     print(f"[✓] Token carregado")
     print(f"[✓] Roletas a monitorar: {len(botauto.roletas)}")
+    print(f"[✓] Estratégia: Sequências de CORES")
     print("="*60 + "\n")
     
     app = ApplicationBuilder().token(TOKEN).build()
