@@ -91,6 +91,17 @@ class BotMultiRoleta:
         
         print(f"[{nome_roleta}] Nº: {numero} | Seq: {roleta.contagem}x | Rodadas: {roleta.rodadas}")
         
+        # Envia atualização a cada 2 números
+        if self.context and self.chat_id and roleta.contagem % 2 == 0:
+            try:
+                await self.context.bot.send_message(
+                    chat_id=self.chat_id,
+                    text=f"📊 *[{nome_roleta}]* Nº: `{numero}` | Seq: `{roleta.contagem}x`",
+                    parse_mode="Markdown"
+                )
+            except:
+                pass
+        
         if roleta.contagem == 10:
             roleta.greens += 1
             sinal = (
